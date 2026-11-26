@@ -1,0 +1,24 @@
+[experience]
+id = "coin-rush"
+version = "0.1.0"
+name = "Coin Rush"
+dimension = "3d"
+
+[interface]
+server = "0.1.0"
+
+[players]
+max = 8
+
+[content]
+violence = "none"
+fear = "none"
+language = "none"
+player_text = false
+player_creations = false
+
+[components.coin]
+fields = { value = "integer" }
+
+[components.runner]
+fields = { name = "text", score = "integer" }

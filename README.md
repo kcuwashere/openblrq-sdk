@@ -20,8 +20,9 @@ but you can't publish them. Creator documentation and policies are in
 | `crates/openblrq-manifest` | Parser and checks for `openblrq.toml` |
 | `cli/` | `obq`, the command-line tool |
 | `examples/hello-server` | A minimal server component |
+| `examples/coin-rush` | A small game: collect coins, most coins after 90 seconds wins |
 
-## Building the example
+## Building the examples
 
 You need Rust 1.99 or newer and the `wasm32-wasip2` target. The toolchain file in this repo installs
 it for you if you use rustup.
@@ -38,6 +39,9 @@ imports:
 ```sh
 wasm-tools component wit target/wasm32-wasip2/release/hello_server.wasm
 ```
+
+Coin Rush builds the same way from `examples/coin-rush`. It shows the parts most games need: entities
+with declared components, giving each player a character, timers, and messages to every player.
 
 ## What your code can do
 

@@ -1,7 +1,7 @@
 [workspace]
 resolver = "3"
 members = ["crates/openblrq", "crates/openblrq-manifest", "cli"]
-exclude = ["examples/hello-server"]
+exclude = ["examples/hello-server", "examples/coin-rush"]
 
 [workspace.package]
 version = "0.1.0"
