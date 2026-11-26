@@ -17,8 +17,10 @@ pub struct Manifest {
     pub interface: Interface,
     #[serde(default)]
     pub capabilities: Vec<Capability>,
+    /// What the client components need on the player's device. Server budgets aren't here: they're
+    /// a setting in the creator dashboard.
     #[serde(default)]
-    pub limits: BTreeMap<String, LimitRequest>,
+    pub client: Option<ClientRequirements>,
     #[serde(default)]
     pub components: BTreeMap<String, ComponentSchema>,
     #[serde(default)]
@@ -68,12 +70,15 @@ pub enum Capability {
     Storage,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+/// Recommended budgets for the experience's client components. Players whose settings allow less
+/// are told before they join.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct LimitRequest {
-    pub value: u64,
-    /// Why the experience needs more than the default. Reviewers read this.
-    pub reason: String,
+pub struct ClientRequirements {
+    /// Memory per client component, in MiB.
+    pub memory_mib: u32,
+    /// Work per frame, in the same units as the platform's CPU budget (instructions, roughly).
+    pub fuel_per_frame: u64,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -185,6 +190,9 @@ pub const MAX_NAME_LEN: usize = 50;
 pub const MAX_COMPONENTS: usize = 256;
 pub const MAX_FIELDS_PER_COMPONENT: usize = 32;
 pub const MAX_ACTIONS: usize = 64;
+/// Client ceilings: a recommendation can't ask for more than any player could allow.
+pub const MAX_CLIENT_MEMORY_MIB: u32 = 128;
+pub const MAX_CLIENT_FUEL_PER_FRAME: u64 = 80_000_000;
 
 impl Manifest {
     pub fn parse(text: &str) -> Result<Self, Error> {
@@ -258,11 +266,17 @@ impl Manifest {
                 format!("at most {MAX_ACTIONS} actions"),
             ));
         }
-        for (name, limit) in &self.limits {
-            if limit.reason.trim().len() < 10 {
+        if let Some(client) = &self.client {
+            if client.memory_mib == 0 || client.memory_mib > MAX_CLIENT_MEMORY_MIB {
                 return Err(invalid(
-                    format!("limits.{name}.reason"),
-                    "explain why the default isn't enough",
+                    "client.memory_mib",
+                    format!("must be 1 to {MAX_CLIENT_MEMORY_MIB}"),
+                ));
+            }
+            if client.fuel_per_frame == 0 || client.fuel_per_frame > MAX_CLIENT_FUEL_PER_FRAME {
+                return Err(invalid(
+                    "client.fuel_per_frame",
+                    format!("must be 1 to {MAX_CLIENT_FUEL_PER_FRAME}"),
                 ));
             }
         }
@@ -320,6 +334,18 @@ mod tests {
             "0".repeat(64)
         );
         assert!(Manifest::parse(&text).is_err());
+    }
+
+    #[test]
+    fn client_recommendations_stay_under_the_ceilings() {
+        let ok = format!("{EXAMPLE}\n[client]\nmemory_mib = 48\nfuel_per_frame = 30000000\n");
+        let m = Manifest::parse(&ok).unwrap();
+        assert_eq!(m.client.unwrap().memory_mib, 48);
+        let too_much = format!("{EXAMPLE}\n[client]\nmemory_mib = 512\nfuel_per_frame = 1\n");
+        assert!(Manifest::parse(&too_much).is_err());
+        // Server budgets are a dashboard setting, so the old section is refused.
+        let old = format!("{EXAMPLE}\n[limits.server_memory]\nvalue = 1\nreason = \"x\"\n");
+        assert!(Manifest::parse(&old).is_err());
     }
 
     #[test]
