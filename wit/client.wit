@@ -1,0 +1,138 @@
+package openblrq:engine@0.1.0;
+
+/// Read access to the replicated scene, plus entities that exist only on this client.
+interface scene {
+    use types.{entity, transform, asset, color, field, host-error};
+
+    get-transform: func(e: entity) -> result<transform, host-error>;
+    get-component: func(e: entity, name: string) -> result<option<list<field>>, host-error>;
+    with-component: func(name: string) -> result<list<entity>, host-error>;
+
+    /// The entity the server set as this player's character, if any.
+    character: func() -> option<entity>;
+
+    spawn-local: func(model: option<asset>, at: transform) -> result<entity, host-error>;
+    set-local-transform: func(e: entity, to: transform) -> result<_, host-error>;
+    despawn-local: func(e: entity) -> result<_, host-error>;
+
+    /// Changes the base colour and emissive strength of an entity's built-in material.
+    /// Works on replicated entities too, for this client only.
+    set-tint: func(e: entity, base: color, emissive: f32) -> result<_, host-error>;
+}
+
+/// Input arrives as actions declared in openblrq.toml, never as raw keys, and only while
+/// the experience has focus.
+interface input {
+    use types.{vec2};
+
+    enum phase { pressed, released }
+
+    record action-event {
+        action: string,
+        phase: phase,
+        /// 0.0 to 1.0 for analogue inputs, 1.0 or 0.0 for buttons.
+        strength: f32,
+    }
+
+    /// Pointer position in the experience viewport, 0.0 to 1.0 on each axis.
+    pointer: func() -> option<vec2>;
+
+    /// Current two-axis value of a declared stick or movement action.
+    axis: func(action: string) -> vec2;
+}
+
+interface camera {
+    use types.{entity, transform, host-error};
+
+    variant mode {
+        follow-character,
+        follow(entity),
+        fixed(transform),
+    }
+
+    set-mode: func(m: mode) -> result<_, host-error>;
+
+    /// Vertical field of view in degrees, 30 to 110.
+    set-fov: func(degrees: f32) -> result<_, host-error>;
+}
+
+/// Declarative UI. The client lays out and draws it below its own menus and overlays.
+interface ui {
+    use types.{asset, color, host-error};
+
+    enum direction { row, column }
+    enum align { start, center, end }
+
+    record style {
+        /// Percent of the parent, or none to fit content.
+        width: option<f32>,
+        height: option<f32>,
+        direction: direction,
+        align: align,
+        gap: f32,
+        padding: f32,
+        background: option<color>,
+        text-color: option<color>,
+        text-size: f32,
+    }
+
+    variant kind {
+        panel,
+        label(string),
+        image(asset),
+        button(string),
+    }
+
+    record node {
+        id: u32,
+        parent: option<u32>,
+        kind: kind,
+        style: style,
+    }
+
+    /// Replaces the experience's whole UI tree. Nodes must come after their parents.
+    set-tree: func(nodes: list<node>) -> result<_, host-error>;
+    clear: func();
+}
+
+interface audio {
+    use types.{asset, vec3, host-error};
+
+    /// Plays a sound from the release. With a position the sound is spatial.
+    play: func(sound: asset, volume: f32, at: option<vec3>) -> result<u64, host-error>;
+    stop: func(id: u64);
+}
+
+interface server-link {
+    use types.{host-error};
+
+    /// Sends bytes to this experience's server component.
+    send: func(payload: list<u8>) -> result<_, host-error>;
+}
+
+/// Functions the host calls on a client component.
+interface client-events {
+    use input.{action-event};
+
+    init: func();
+    frame: func(dt: f32);
+    server-message: func(payload: list<u8>);
+    action: func(event: action-event);
+    ui-pressed: func(id: u32);
+
+    /// The host menu opened or closed. Input stops while paused.
+    paused: func(is-paused: bool);
+}
+
+world client {
+    import log;
+    import time;
+    import scene;
+    import input;
+    import camera;
+    import ui;
+    import audio;
+    import server-link;
+
+    export client-events;
+}

@@ -1,0 +1,21 @@
+[experience]
+id = "hello-server"
+version = "0.1.0"
+name = "Hello"
+dimension = "3d"
+
+[interface]
+server = "0.1.0"
+
+[players]
+max = 8
+
+[content]
+violence = "none"
+fear = "none"
+language = "none"
+player_text = false
+player_creations = false
+
+[components.greeted]
+fields = { times = "integer" }

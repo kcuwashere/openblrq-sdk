@@ -1,0 +1,13 @@
+[package]
+name = "obq"
+description = "Command-line tool for building and publishing OpenBLRQ experiences"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+blake3.workspace = true
+clap.workspace = true
+openblrq-manifest = { path = "../crates/openblrq-manifest" }

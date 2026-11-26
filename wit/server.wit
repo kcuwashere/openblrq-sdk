@@ -1,0 +1,145 @@
+package openblrq:engine@0.1.0;
+
+interface entities {
+    use types.{entity, transform, asset, field, host-error};
+
+    spawn: func(at: transform) -> result<entity, host-error>;
+    despawn: func(e: entity) -> result<_, host-error>;
+
+    get-transform: func(e: entity) -> result<transform, host-error>;
+    set-transform: func(e: entity, to: transform) -> result<_, host-error>;
+
+    /// Attaches a model from the release. Pass none to remove it.
+    set-model: func(e: entity, model: option<asset>) -> result<_, host-error>;
+
+    /// Sets a component declared in openblrq.toml. Fields not given keep their values.
+    set-component: func(e: entity, name: string, fields: list<field>) -> result<_, host-error>;
+    get-component: func(e: entity, name: string) -> result<option<list<field>>, host-error>;
+    remove-component: func(e: entity, name: string) -> result<_, host-error>;
+
+    /// Every entity that currently has the named component.
+    with-component: func(name: string) -> result<list<entity>, host-error>;
+}
+
+interface players {
+    use types.{player, entity, host-error};
+
+    record player-info {
+        handle: player,
+        /// Stable for this experience and this account, unrelated to the account's ID or
+        /// to the ID any other experience sees. Safe to use as a storage key.
+        id: string,
+        display-name: string,
+    }
+
+    connected: func() -> list<player-info>;
+
+    /// The entity the client's camera follows and that receives this player's movement input.
+    set-character: func(p: player, e: option<entity>) -> result<_, host-error>;
+
+    /// Removes the player from the instance. The reason is shown to them by the client.
+    kick: func(p: player, reason: string) -> result<_, host-error>;
+}
+
+/// The experience channel between this server component and its client components.
+interface messaging {
+    use types.{player, host-error};
+
+    send: func(to: player, payload: list<u8>) -> result<_, host-error>;
+    broadcast: func(payload: list<u8>) -> result<_, host-error>;
+}
+
+interface timers {
+    use types.{host-error};
+
+    /// Calls timer-fired with the returned id after the given number of ticks.
+    schedule: func(after-ticks: u32) -> result<u64, host-error>;
+    cancel: func(id: u64);
+}
+
+/// Needs the "physics" capability. The instance is 2D or 3D, as declared in the manifest;
+/// in 2D the z components of vectors are ignored.
+interface physics {
+    use types.{entity, vec3, asset, host-error};
+
+    enum body-kind { dynamic, fixed, kinematic }
+
+    record capsule { half-height: f32, radius: f32 }
+
+    variant shape {
+        ball(f32),
+        cuboid(vec3),
+        capsule(capsule),
+        /// Convex hull of a model in the release.
+        hull(asset),
+    }
+
+    record material {
+        friction: f32,
+        restitution: f32,
+        density: f32,
+    }
+
+    record ray-hit {
+        entity: entity,
+        distance: f32,
+        point: vec3,
+        normal: vec3,
+    }
+
+    add-body: func(e: entity, kind: body-kind) -> result<_, host-error>;
+    remove-body: func(e: entity) -> result<_, host-error>;
+    add-collider: func(e: entity, shape: shape, mat: material) -> result<_, host-error>;
+
+    get-velocity: func(e: entity) -> result<vec3, host-error>;
+    set-velocity: func(e: entity, linear: vec3) -> result<_, host-error>;
+    apply-impulse: func(e: entity, impulse: vec3) -> result<_, host-error>;
+
+    raycast: func(origin: vec3, direction: vec3, max-distance: f32) -> result<option<ray-hit>, host-error>;
+}
+
+/// Needs the "storage" capability. A key-value store kept per experience, across instances.
+/// The whole store is loaded when the instance starts, so reads are immediate; writes are
+/// saved in the background and are durable within a few seconds.
+interface storage {
+    use types.{host-error};
+
+    get: func(key: string) -> result<option<list<u8>>, host-error>;
+    set: func(key: string, value: list<u8>) -> result<_, host-error>;
+    delete: func(key: string) -> result<_, host-error>;
+    keys: func(prefix: string) -> result<list<string>, host-error>;
+}
+
+/// Functions the host calls on a server component.
+interface server-events {
+    use players.{player-info};
+    use types.{player};
+
+    /// Called once, before the first tick. `config` is the experience's server config from
+    /// the manifest, as UTF-8 TOML.
+    init: func(config: string);
+
+    tick: func();
+
+    player-joined: func(p: player-info);
+    player-left: func(p: player);
+
+    client-message: func(sender: player, payload: list<u8>);
+    timer-fired: func(id: u64);
+
+    /// Called when the instance is stopping. Storage writes made here are still saved.
+    shutdown: func();
+}
+
+world server {
+    import log;
+    import time;
+    import entities;
+    import players;
+    import messaging;
+    import timers;
+    import physics;
+    import storage;
+
+    export server-events;
+}

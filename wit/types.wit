@@ -1,0 +1,84 @@
+package openblrq:engine@0.1.0;
+
+/// Types shared by the server and client worlds.
+interface types {
+    record vec2 { x: f32, y: f32 }
+    record vec3 { x: f32, y: f32, z: f32 }
+
+    /// Unit quaternion. The host normalises it on write.
+    record quat { x: f32, y: f32, z: f32, w: f32 }
+
+    record transform {
+        translation: vec3,
+        rotation: quat,
+        scale: vec3,
+    }
+
+    /// Linear RGBA, each channel 0.0 to 1.0.
+    record color { r: f32, g: f32, b: f32, a: f32 }
+
+    /// Handle to an entity in this instance. Handles are only meaningful inside the
+    /// instance that issued them and become invalid once the entity is despawned.
+    type entity = u64;
+
+    /// Handle to a connected player in this instance.
+    type player = u64;
+
+    /// Path of an asset inside the release, for example "assets/models/crate.glb".
+    type asset = string;
+
+    /// A field value of a component declared in openblrq.toml.
+    variant value {
+        boolean(bool),
+        integer(s64),
+        number(f64),
+        point2(vec2),
+        point3(vec3),
+        rotation(quat),
+        tint(color),
+        text(string),
+        blob(list<u8>),
+        target(entity),
+        asset-ref(asset),
+    }
+
+    record field {
+        name: string,
+        value: value,
+    }
+
+    enum log-level { trace, debug, info, warn, error }
+
+    enum host-error {
+        /// The handle doesn't refer to a live entity, player, body or sound.
+        invalid-handle,
+        /// The release wasn't granted the capability this call needs.
+        not-permitted,
+        /// A budget or quota would be exceeded.
+        limit-reached,
+        /// An argument was out of range, too long or malformed.
+        invalid-argument,
+        /// No component with that name is declared in the manifest.
+        unknown-component,
+        /// No asset with that path is part of the release.
+        unknown-asset,
+    }
+}
+
+/// Log lines go to the experience log in the creator dashboard. Output is rate limited.
+interface log {
+    use types.{log-level};
+
+    write: func(level: log-level, message: string);
+}
+
+interface time {
+    /// Simulation tick on the server, frame number on the client.
+    tick: func() -> u64;
+
+    /// Fixed ticks per second on the server.
+    tick-rate: func() -> u32;
+
+    /// Seconds since the instance started.
+    elapsed: func() -> f64;
+}
