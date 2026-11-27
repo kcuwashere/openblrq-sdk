@@ -98,22 +98,54 @@ interface physics {
     raycast: func(origin: vec3, direction: vec3, max-distance: f32) -> result<option<ray-hit>, host-error>;
 }
 
-/// Needs the "storage" capability. A key-value store kept per experience, across instances.
-/// The whole store is loaded when the instance starts, so reads are immediate; writes are
-/// saved in the background and are durable within a few seconds.
+/// Needs the "storage" capability. Data kept across instances: one store for the experience,
+/// and one per player.
+///
+/// Reads come from this instance's copy, so they're immediate. The experience store is loaded
+/// when the instance starts and picks up other instances' writes every few seconds. A player's
+/// store is loaded before `player-joined` and only one instance holds it at a time. Writes apply
+/// to the copy at once and are saved in the background within 5 seconds.
+///
+/// Keys are UTF-8, up to 256 bytes. Values are up to 64 KiB.
 interface storage {
-    use types.{host-error};
+    use types.{player, host-error};
 
-    get: func(key: string) -> result<option<list<u8>>, host-error>;
+    record entry {
+        value: list<u8>,
+        /// Goes up by one on every write. 0 means the key doesn't exist.
+        version: u64,
+    }
+
+    get: func(key: string) -> result<option<entry>, host-error>;
+    /// Last write wins, across all instances.
     set: func(key: string, value: list<u8>) -> result<_, host-error>;
     delete: func(key: string) -> result<_, host-error>;
     keys: func(prefix: string) -> result<list<string>, host-error>;
+
+    /// Adds `delta` to a counter, atomically across instances. The value is a signed 64-bit
+    /// integer stored as 8 bytes little-endian; a missing key counts as 0. Returns the new value
+    /// as this instance sees it, which may not yet include other instances' increments.
+    increment: func(key: string, delta: s64) -> result<s64, host-error>;
+
+    /// Writes `value` only if the stored version is still `expected-version`. Other instances may
+    /// have written in the meantime, and only the store can tell, so the answer comes later:
+    /// this returns a request id, and `storage-updated` is called with it once the write is saved
+    /// or refused with `conflict`.
+    update: func(key: string, expected-version: u64, value: list<u8>) -> result<u64, host-error>;
+
+    player-get: func(p: player, key: string) -> result<option<entry>, host-error>;
+    player-set: func(p: player, key: string, value: list<u8>) -> result<_, host-error>;
+    player-delete: func(p: player, key: string) -> result<_, host-error>;
+    player-keys: func(p: player, prefix: string) -> result<list<string>, host-error>;
+    /// Like `update`, but a player's store is only ever held by this instance, so the answer is
+    /// immediate: the new version, or `conflict`.
+    player-update: func(p: player, key: string, expected-version: u64, value: list<u8>) -> result<u64, host-error>;
 }
 
 /// Functions the host calls on a server component.
 interface server-events {
     use players.{player-info};
-    use types.{player};
+    use types.{player, host-error};
 
     /// Called once, before the first tick. `config` is the experience's server config from
     /// the manifest, as UTF-8 TOML.
@@ -121,11 +153,16 @@ interface server-events {
 
     tick: func();
 
+    /// With the "storage" capability, called once the player's store is loaded.
     player-joined: func(p: player-info);
     player-left: func(p: player);
 
     client-message: func(sender: player, payload: list<u8>);
     timer-fired: func(id: u64);
+
+    /// The outcome of a `storage.update`: the new version, or `conflict` if another instance
+    /// wrote first, or `limit-reached` if the store was full. Never called without storage.
+    storage-updated: func(request: u64, outcome: result<u64, host-error>);
 
     /// Called when the instance is stopping. Storage writes made here are still saved.
     shutdown: func();

@@ -62,6 +62,8 @@ interface types {
         unknown-component,
         /// No asset with that path is part of the release.
         unknown-asset,
+        /// Someone else wrote the stored value since the version you gave.
+        conflict,
     }
 }
 

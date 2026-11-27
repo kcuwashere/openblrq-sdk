@@ -12,7 +12,7 @@ use std::collections::BTreeMap;
 use openblrq::server::exports::openblrq::engine::server_events::Guest;
 use openblrq::server::openblrq::engine::players::{self, PlayerInfo};
 use openblrq::server::openblrq::engine::types::{
-    Entity, Field, LogLevel, Player, Quat, Transform, Value, Vec3,
+    Entity, Field, HostError, LogLevel, Player, Quat, Transform, Value, Vec3,
 };
 use openblrq::server::openblrq::engine::{entities, log, messaging, time, timers};
 
@@ -112,7 +112,10 @@ impl Game {
             .max_by_key(|r| r.score)
             .filter(|r| r.score > 0);
         let text = match best {
-            Some(r) => format!("Round {} is over. {} wins with {}.", self.round, r.name, r.score),
+            Some(r) => format!(
+                "Round {} is over. {} wins with {}.",
+                self.round, r.name, r.score
+            ),
             None => format!("Round {} is over. Nobody picked up a coin.", self.round),
         };
         log::write(LogLevel::Info, &text);
@@ -219,8 +222,11 @@ impl Guest for CoinRush {
             g.runners.insert(p.handle, runner);
             let _ = messaging::send(
                 p.handle,
-                format!("Welcome, {}. Walk over coins to pick them up.", p.display_name)
-                    .as_bytes(),
+                format!(
+                    "Welcome, {}. Walk over coins to pick them up.",
+                    p.display_name
+                )
+                .as_bytes(),
             );
         });
     }
@@ -246,6 +252,8 @@ impl Guest for CoinRush {
             }
         });
     }
+
+    fn storage_updated(_request: u64, _outcome: Result<u64, HostError>) {}
 
     fn shutdown() {}
 }

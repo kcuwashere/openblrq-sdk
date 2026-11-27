@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use openblrq::server::exports::openblrq::engine::server_events::Guest;
 use openblrq::server::openblrq::engine::players::{self, PlayerInfo};
 use openblrq::server::openblrq::engine::types::{
-    Entity, Field, LogLevel, Player, Quat, Transform, Value, Vec3,
+    Entity, Field, HostError, LogLevel, Player, Quat, Transform, Value, Vec3,
 };
 use openblrq::server::openblrq::engine::{entities, log};
 
@@ -68,6 +68,8 @@ impl Guest for Hello {
     fn client_message(_sender: Player, _payload: Vec<u8>) {}
 
     fn timer_fired(_id: u64) {}
+
+    fn storage_updated(_request: u64, _outcome: Result<u64, HostError>) {}
 
     fn shutdown() {}
 }
