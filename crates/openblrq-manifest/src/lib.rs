@@ -7,6 +7,8 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
+pub mod bundle;
+
 /// Interface versions this crate knows about.
 pub const SUPPORTED_INTERFACES: &[&str] = &["0.1.0"];
 
@@ -195,6 +197,15 @@ pub const MAX_CLIENT_MEMORY_MIB: u32 = 128;
 pub const MAX_CLIENT_FUEL_PER_FRAME: u64 = 80_000_000;
 
 impl Manifest {
+    /// Checks that a built bundle's manifest lists a server component. A source manifest,
+    /// before `obq build`, has no `[files]` yet.
+    pub fn check_built(&self) -> Result<(), Error> {
+        if !self.files.contains_key(bundle::SERVER_FILE) {
+            return Err(invalid("files", "a bundle needs server.wasm"));
+        }
+        Ok(())
+    }
+
     pub fn parse(text: &str) -> Result<Self, Error> {
         let manifest: Manifest = toml::from_str(text)?;
         manifest.validate()?;
@@ -280,20 +291,34 @@ impl Manifest {
                 ));
             }
         }
+        if self.files.len() > bundle::MAX_FILES {
+            return Err(invalid(
+                "files",
+                format!("at most {} files", bundle::MAX_FILES),
+            ));
+        }
+        let mut total = 0u64;
         for (path, entry) in &self.files {
-            if path.starts_with('/') || path.split('/').any(|part| part == ".." || part.is_empty())
-            {
-                return Err(invalid(
-                    format!("files.{path}"),
-                    "must be a relative path inside the bundle",
-                ));
-            }
+            let kind = bundle::file_kind(path)?;
             if !is_blake3(&entry.hash) {
                 return Err(invalid(
                     format!("files.{path}.hash"),
                     "expected blake3:<64 hex digits>",
                 ));
             }
+            if entry.size > kind.max_bytes() {
+                return Err(invalid(
+                    format!("files.{path}.size"),
+                    format!("at most {} bytes for this kind of file", kind.max_bytes()),
+                ));
+            }
+            total = total.saturating_add(entry.size);
+        }
+        if total > bundle::MAX_BUNDLE_BYTES {
+            return Err(invalid(
+                "files",
+                format!("the bundle is at most {} bytes", bundle::MAX_BUNDLE_BYTES),
+            ));
         }
         Ok(())
     }

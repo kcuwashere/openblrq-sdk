@@ -10,4 +10,7 @@ repository.workspace = true
 [dependencies]
 blake3.workspace = true
 clap.workspace = true
+ed25519-dalek.workspace = true
+getrandom.workspace = true
+serde_json.workspace = true
 openblrq-manifest = { path = "../crates/openblrq-manifest" }
